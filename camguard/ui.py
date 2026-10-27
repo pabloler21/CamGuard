@@ -22,6 +22,27 @@ BRUSH_SIZE = 60
 # Gradio borra sus copias de videos subidos y resultados: cada media hora, las de más de 1 hora.
 CACHE_CLEANUP = (1800, 3600)
 
+# Arregla el editor de Gradio (6.30) cuando el zoom del navegador no es 100%: su lienzo queda
+# más ancho que el recuadro (1853 px en uno de 916 con zoom 90%), centra la imagen sobre ese
+# ancho y se ve corrida a la derecha, cortada, sin poder pintar encima. Ajusta el lienzo al
+# recuadro y vuelve a encuadrar la imagen; se repite unos segundos para cubrir la carga lenta de
+# la imagen, y al cambiar el zoom o el tamaño de la ventana. window.editor es interno de Gradio:
+# si deja de existir, no hace nada.
+REFIT_EDITOR_JS = """() => {
+    if (!window.camguardRefit) {
+        window.camguardRefit = () => {
+            try {
+                const editor = window.editor;
+                const box = editor.target_element.getBoundingClientRect();
+                editor.resize_canvas(box.width, box.height);
+                editor.tools.get("zoom").set_zoom("fit");
+            } catch {}
+        };
+        window.addEventListener("resize", () => setTimeout(window.camguardRefit, 100));
+    }
+    for (const ms of [300, 1000, 2500, 5000]) setTimeout(window.camguardRefit, ms);
+}"""
+
 # Hugging Face define SPACE_ID en todo Space; en la PC no existe.
 WHERE = (
     "> 🔒 **El video se procesa en servidores de Hugging Face.** No subas grabaciones reales o "
@@ -157,8 +178,9 @@ def build_demo() -> gr.Blocks:
         )
         gallery = gr.Gallery(label="Momento de entrada de cada intruso", columns=4)
 
-        video.upload(blank_zone, video, editor)
-        clear.click(blank_zone, video, editor)
+        demo.load(None, js=REFIT_EDITOR_JS)
+        video.upload(blank_zone, video, editor).then(None, js=REFIT_EDITOR_JS)
+        clear.click(blank_zone, video, editor).then(None, js=REFIT_EDITOR_JS)
         run.click(on_analyze, [video, editor], [result, table, gallery])
     return demo
 
