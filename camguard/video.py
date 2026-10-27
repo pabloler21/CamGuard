@@ -129,9 +129,7 @@ class H264Writer:
 
     def write(self, frame_bgr: np.ndarray) -> None:
         """Agrega un cuadro BGR al video."""
-        frame = av.VideoFrame.from_ndarray(
-            frame_bgr[: self._height, : self._width], format="bgr24"
-        )
+        frame = av.VideoFrame.from_ndarray(frame_bgr[: self._height, : self._width], format="bgr24")
         self._container.mux(self._stream.encode(frame))
 
     def close(self) -> None:

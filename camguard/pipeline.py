@@ -91,7 +91,9 @@ def analyze(
     expected = max(1, math.ceil(max_frames / step))
 
     tracker = make_tracker(fps)
-    out_path = Path(tempfile.NamedTemporaryFile(suffix=".mp4", delete=False).name)
+    # Carpeta temporal propia: el archivo no queda abierto (en Windows eso bloquea la escritura)
+    # y se puede llamar "resultado.mp4", que es el nombre que ve el usuario si lo descarga.
+    out_path = Path(tempfile.mkdtemp(prefix="camguard-")) / "resultado.mp4"
     frames_in_zone: dict[int, list[int]] = {}
     snapshots: list[Snapshot] = []
 
