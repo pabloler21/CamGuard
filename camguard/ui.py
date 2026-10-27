@@ -19,8 +19,8 @@ INSTRUCTIONS = f"""\
 # CamGuard — Intruso en zona
 1. Ya viene cargado un video de ejemplo. Si querés usar uno propio, tocá la ✕ del video y \
 subí el tuyo.
-2. Pintá encima de la imagen de la derecha el área restringida. Si te equivocás, tocá \
-**Borrar zona** y volvé a pintar.
+2. Pintá encima de la imagen de la derecha el área restringida: el pincel ya está activo, \
+arrastrá directamente sobre la imagen. Si te equivocás, tocá **Borrar zona** y volvé a pintar.
 3. Tocá **Analizar**.
 
 Se analizan {FPS} cuadros por segundo y hasta {MAX_SECONDS} s de video. Todo corre en esta PC.
@@ -50,32 +50,49 @@ def load_example() -> tuple[str | None, dict | None]:
     return path, editor_value(first_frame(path))
 
 
-def blank_zone(video_path: str | None) -> dict:
+def warn(message: str) -> None:
+    """Muestra un aviso amarillo para cuando al usuario le falta un paso.
+
+    Se usa en vez de ``gr.Error`` porque no es una falla de la app: ``gr.Error`` muestra un
+    cartel rojo "Error", marca el resultado como fallido e imprime un traceback en la consola.
+    """
+    gr.Warning(message)
+
+
+def blank_zone(video_path: str | None):
     """Pone el primer cuadro del video en el editor, sin nada pintado.
 
     Se usa al subir un video y al tocar "Borrar zona".
+
+    Returns:
+        El valor del editor, o ``gr.skip()`` (no lo cambia) si no hay un video legible.
     """
     if not video_path:
-        raise gr.Error("Primero subí un video.")
+        warn("Primero subí un video.")
+        return gr.skip()
     try:
         return editor_value(first_frame(video_path))
     except ValueError as e:
-        raise gr.Error(str(e)) from e
+        warn(str(e))
+        return gr.skip()
 
 
 def on_analyze(video_path: str | None, editor: dict | None, progress=gr.Progress()):  # noqa: B008
     """Corre el análisis y lo convierte en lo que muestran los componentes de la página.
 
     Returns:
-        (video anotado, filas de la tabla de eventos, imágenes de la galería con su leyenda).
+        (video anotado, filas de la tabla de eventos, imágenes de la galería con su leyenda), o
+        ``gr.skip()`` en las tres (deja los resultados como estaban) si falta el video o la zona.
     """
     if not video_path:
-        raise gr.Error("Primero subí un video.")
+        warn("Primero subí un video.")
+        return (gr.skip(),) * 3
     layers = (editor or {}).get("layers") or []
     try:
         result = analyze(video_path, layers, progress=lambda p: progress(p, desc="Analizando"))
-    except ValueError as e:
-        raise gr.Error(str(e)) from e
+    except ValueError as e:  # video ilegible o sin zona pintada
+        warn(str(e))
+        return (gr.skip(),) * 3
 
     if not result.events:
         gr.Info("No hubo intrusiones en la zona.")
