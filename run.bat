@@ -2,5 +2,5 @@
 cd /d "%~dp0"
 where uv >nul 2>nul || powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
 set "PATH=%USERPROFILE%\.local\bin;%PATH%"
-uv run python app.py
+uv run --no-dev python app.py
 pause
