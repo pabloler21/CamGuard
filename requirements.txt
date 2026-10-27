@@ -1,0 +1,11 @@
+# Dependencias del Space de Hugging Face (la PC usa pyproject.toml + uv.lock). Gradio no va acá:
+# lo instala el Space según sdk_version en el README.
+# torch fijo en 2.13.0: ZeroGPU todavía no soporta 2.14 (el de uv.lock).
+av==19.0.2
+numpy==2.5.4
+opencv-python==5.0.0.93
+rfdetr==1.11.2
+spaces==0.51.3
+supervision==0.31.2
+torch==2.13.0
+trackers==2.6.1
