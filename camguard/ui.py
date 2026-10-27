@@ -30,6 +30,9 @@ arrastrá directamente sobre la imagen. Si te equivocás, tocá **Borrar zona** 
 
 Se analizan {FPS} cuadros por segundo y hasta {MAX_SECONDS} s de video. Todo corre en esta PC.
 
+> ⚠️ **Es una demo.** Puede no detectar a algunas personas (lejanas, tapadas, agachadas o con \
+poca luz) y no reemplaza la vigilancia humana. Una entrada a los 0,2 s puede significar que la \
+persona ya estaba en la zona cuando empezó el video.
 """
 
 
