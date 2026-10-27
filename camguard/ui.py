@@ -4,16 +4,21 @@ Es la única parte que conoce Gradio: traduce los ``ValueError`` del pipeline en
 el usuario y los resultados en tabla y galería.
 """
 
+import shutil
+
 import gradio as gr
 import numpy as np
 
-from camguard.config import FPS, MAX_SECONDS
+from camguard.config import FPS, MAX_SECONDS, TEMP_DIR
 from camguard.detection import load_model
 from camguard.pipeline import analyze
 from camguard.video import first_frame
 
 # Grosor del pincel, en píxeles del video (1920 de ancho en el ejemplo).
 BRUSH_SIZE = 60
+
+# Gradio borra sus copias de videos subidos y resultados: cada media hora, las de más de 1 hora.
+CACHE_CLEANUP = (1800, 3600)
 
 INSTRUCTIONS = f"""\
 # CamGuard — Intruso en zona
@@ -24,6 +29,7 @@ arrastrá directamente sobre la imagen. Si te equivocás, tocá **Borrar zona** 
 3. Tocá **Analizar**.
 
 Se analizan {FPS} cuadros por segundo y hasta {MAX_SECONDS} s de video. Todo corre en esta PC.
+
 """
 
 
@@ -89,7 +95,12 @@ def on_analyze(video_path: str | None, editor: dict | None, progress=gr.Progress
         return (gr.skip(),) * 3
     layers = (editor or {}).get("layers") or []
     try:
-        result = analyze(video_path, layers, progress=lambda p: progress(p, desc="Analizando"))
+        result = analyze(
+            video_path,
+            layers,
+            progress=lambda p: progress(p, desc="Analizando"),
+            out_dir=TEMP_DIR / "resultados",
+        )
     except ValueError as e:  # video ilegible o sin zona pintada
         warn(str(e))
         return (gr.skip(),) * 3
@@ -104,7 +115,9 @@ def on_analyze(video_path: str | None, editor: dict | None, progress=gr.Progress
 def build_demo() -> gr.Blocks:
     """Arma la página: video y editor lado a lado, el botón, y los tres resultados."""
     example_video, example_editor = load_example()
-    with gr.Blocks(title="CamGuard") as demo:
+    # analytics_enabled=False: Gradio manda telemetría de uso por defecto (no los videos, pero
+    # una app que maneja grabaciones de seguridad no debería hablar con nadie).
+    with gr.Blocks(title="CamGuard", analytics_enabled=False, delete_cache=CACHE_CLEANUP) as demo:
         gr.Markdown(INSTRUCTIONS)
         with gr.Row():
             video = gr.Video(value=example_video, label="Video", sources=["upload"])
@@ -131,9 +144,14 @@ def build_demo() -> gr.Blocks:
 
 
 def main() -> None:
-    """Carga el modelo, arma la página y la abre en el navegador.
+    """Borra los videos de la sesión anterior, carga el modelo y abre la página.
 
-    Solo escucha en 127.0.0.1: nadie de la red ni de internet puede entrar (son videos reales).
+    Los videos subidos y los resultados son grabaciones reales y quedan en ``TEMP_DIR``. Al
+    cerrar la ventana el proceso termina de golpe y no alcanza a limpiar, por eso se vacía al
+    arrancar; mientras la app está abierta, ``delete_cache`` borra lo que tiene más de una hora.
+    Solo escucha en 127.0.0.1: nadie de la red ni de internet puede entrar.
     """
+    # ponytail: los videos de la última sesión quedan en disco hasta el próximo arranque.
+    shutil.rmtree(TEMP_DIR, ignore_errors=True)
     load_model()  # al arrancar, para que el primer análisis no espere la carga
     build_demo().launch(inbrowser=True)

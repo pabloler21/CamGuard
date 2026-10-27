@@ -76,6 +76,13 @@ def test_person_counts_by_body_center_not_feet(video, zone_layers):
     assert result.events == []
 
 
+def test_analyze_writes_the_result_inside_out_dir(video, zone_layers, tmp_path):
+    # Así la app puede borrar todos los videos generados (son grabaciones reales).
+    out_dir = tmp_path / "resultados"
+    result = analyze(video, zone_layers, make_tracker=FakeTracker, out_dir=out_dir)
+    assert out_dir in result.video_path.parents
+
+
 def test_analyze_respects_max_seconds(video, zone_layers, monkeypatch):
     monkeypatch.setattr("camguard.pipeline.MAX_SECONDS", 1)
     result = analyze(video, zone_layers, make_tracker=FakeTracker)

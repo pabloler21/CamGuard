@@ -65,6 +65,7 @@ def analyze(
     zone_layers: list[np.ndarray],
     make_tracker: Callable[[float], Tracker] = PersonTracker,
     progress: Callable[[float], None] | None = None,
+    out_dir: Path | None = None,
 ) -> AnalysisResult:
     """Analiza un video y detecta quién entra a la zona restringida.
 
@@ -76,6 +77,8 @@ def analyze(
         make_tracker: Crea el tracker a partir de los fps analizados. Por defecto el real
             (RF-DETR + ByteTrack); los tests pasan uno falso.
         progress: Se llama después de cada cuadro con el avance, entre 0 y 1.
+        out_dir: Dónde guardar el video anotado (en una subcarpeta propia). Por defecto, la
+            carpeta temporal del sistema. La app pasa una que vacía al arrancar.
 
     Returns:
         El video anotado, los eventos y las capturas.
@@ -93,7 +96,9 @@ def analyze(
     tracker = make_tracker(fps)
     # Carpeta temporal propia: el archivo no queda abierto (en Windows eso bloquea la escritura)
     # y se puede llamar "resultado.mp4", que es el nombre que ve el usuario si lo descarga.
-    out_path = Path(tempfile.mkdtemp(prefix="camguard-")) / "resultado.mp4"
+    if out_dir is not None:
+        out_dir.mkdir(parents=True, exist_ok=True)
+    out_path = Path(tempfile.mkdtemp(prefix="camguard-", dir=out_dir)) / "resultado.mp4"
     frames_in_zone: dict[int, list[int]] = {}
     snapshots: list[Snapshot] = []
 
