@@ -4,10 +4,12 @@ Es la única parte que conoce Gradio: traduce los ``ValueError`` del pipeline en
 el usuario y los resultados en tabla y galería.
 """
 
+import os
 import shutil
 
 import gradio as gr
 import numpy as np
+import spaces
 
 from camguard.config import FPS, MAX_SECONDS, MAX_UPLOAD, TEMP_DIR
 from camguard.detection import load_model
@@ -20,6 +22,14 @@ BRUSH_SIZE = 60
 # Gradio borra sus copias de videos subidos y resultados: cada media hora, las de más de 1 hora.
 CACHE_CLEANUP = (1800, 3600)
 
+# Hugging Face define SPACE_ID en todo Space; en la PC no existe.
+WHERE = (
+    "> 🔒 **El video se procesa en servidores de Hugging Face.** No subas grabaciones reales o "
+    "sensibles: para eso está la versión que corre en tu PC (ver el README)."
+    if os.getenv("SPACE_ID")
+    else "Todo corre en esta PC."
+)
+
 INSTRUCTIONS = f"""\
 # CamGuard — Intruso en zona
 1. Ya viene cargado un video de ejemplo. Si querés usar uno propio, tocá la ✕ del video y \
@@ -28,7 +38,9 @@ subí el tuyo.
 arrastrá directamente sobre la imagen. Si te equivocás, tocá **Borrar zona** y volvé a pintar.
 3. Tocá **Analizar**.
 
-Se analizan {FPS} cuadros por segundo y hasta {MAX_SECONDS} s de video. Todo corre en esta PC.
+Se analizan {FPS} cuadros por segundo y hasta {MAX_SECONDS} s de video.
+
+{WHERE}
 
 > ⚠️ **Es una demo.** Puede no detectar a algunas personas (lejanas, tapadas, agachadas o con \
 poca luz) y no reemplaza la vigilancia humana. Una entrada a los 0,2 s puede significar que la \
@@ -86,6 +98,11 @@ def blank_zone(video_path: str | None):
         return gr.skip()
 
 
+# En el Space de Hugging Face pide una GPU (ZeroGPU) mientras dura el análisis; en la PC no hace
+# nada. Va sobre on_analyze y no sobre analyze porque ZeroGPU lo corre en otro proceso y convierte
+# cualquier excepción que no sea gr.Error en un "ZeroGPU worker error": acá los ValueError ya
+# se volvieron avisos.
+@spaces.GPU
 def on_analyze(video_path: str | None, editor: dict | None, progress=gr.Progress()):  # noqa: B008
     """Corre el análisis y lo convierte en lo que muestran los componentes de la página.
 
@@ -152,9 +169,12 @@ def main() -> None:
     Los videos subidos y los resultados son grabaciones reales y quedan en ``TEMP_DIR``. Al
     cerrar la ventana el proceso termina de golpe y no alcanza a limpiar, por eso se vacía al
     arrancar; mientras la app está abierta, ``delete_cache`` borra lo que tiene más de una hora.
-    Solo escucha en 127.0.0.1: nadie de la red ni de internet puede entrar.
+    En la PC solo escucha en 127.0.0.1: nadie de la red ni de internet puede entrar. En el Space
+    de Hugging Face, Gradio escucha en 0.0.0.0 porque así lo indica ``GRADIO_SERVER_NAME``.
     """
     # ponytail: los videos de la última sesión quedan en disco hasta el próximo arranque.
     shutil.rmtree(TEMP_DIR, ignore_errors=True)
-    load_model()  # al arrancar, para que el primer análisis no espere la carga
+    # Al arrancar, para que el primer análisis no espere la carga. En ZeroGPU además es
+    # obligatorio: el modelo tiene que pasar a la GPU antes de entrar a una función @spaces.GPU.
+    load_model()
     build_demo().launch(inbrowser=True, max_file_size=MAX_UPLOAD)
