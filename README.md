@@ -32,6 +32,24 @@ Para cerrarla, cerrá la ventana negra (la terminal).
 
 ## Para desarrolladores
 
-- Modelo: [RF-DETR Small](https://github.com/roboflow/rf-detr) (Apache-2.0). Tracking: [trackers](https://github.com/roboflow/trackers) ByteTrack. UI: Gradio.
-- Las perillas están arriba de `app.py`: `FPS`, `MAX_SECONDS`, `CONF` y `MAX_GAP_S`.
-- Para correr las pruebas: `uv run python test_zone.py`.
+Modelo: [RF-DETR Small](https://github.com/roboflow/rf-detr) (Apache-2.0). Tracking: [trackers](https://github.com/roboflow/trackers) ByteTrack. UI: Gradio.
+
+```sh
+uv run python app.py      # levantar la app
+uv run pytest             # pruebas (~3 s, no descargan el modelo)
+uv run ruff check .       # linter
+uv run ruff format .      # formatear
+```
+
+`app.py` es solo el punto de entrada; el código está en el paquete `camguard/`:
+
+| Módulo | Qué hace |
+|---|---|
+| `config.py` | Perillas ajustables: `FPS`, `MAX_SECONDS`, `CONF`, `MAX_GAP_S` |
+| `zone.py` | Convierte lo pintado en una máscara y decide quién tiene los pies adentro |
+| `events.py` | Agrupa cuadros en eventos de entrada y salida (`Event`) |
+| `video.py` | Lectura submuestreada y escritura H.264 |
+| `detection.py` | RF-DETR + ByteTrack: personas con número de seguimiento |
+| `annotate.py` | Dibuja la zona y los recuadros |
+| `pipeline.py` | `analyze()`: orquesta todo; no depende de Gradio |
+| `ui.py` | La página web y el video de ejemplo |
