@@ -43,6 +43,11 @@ REFIT_EDITOR_JS = """() => {
     for (const ms of [300, 1000, 2500, 5000]) setTimeout(window.camguardRefit, ms);
 }"""
 
+# El lienzo de la herramienta de recorte del mismo editor mide el doble de su recuadro aunque no
+# se use: se sale y la página queda desplazable a los costados; al arrastrar cerca del borde se
+# corre entera y el trazo cae fuera de la imagen. Recortar lo que sobresale lo evita.
+EDITOR_CSS = ".pixi-target, .pixi-target-crop { overflow: hidden; }"
+
 # Hugging Face define SPACE_ID en todo Space; en la PC no existe.
 WHERE = (
     "> 🔒 **El video se procesa en servidores de Hugging Face.** No subas grabaciones reales o "
@@ -199,4 +204,4 @@ def main() -> None:
     # Al arrancar, para que el primer análisis no espere la carga. En ZeroGPU además es
     # obligatorio: el modelo tiene que pasar a la GPU antes de entrar a una función @spaces.GPU.
     load_model()
-    build_demo().launch(inbrowser=True, max_file_size=MAX_UPLOAD)
+    build_demo().launch(inbrowser=True, max_file_size=MAX_UPLOAD, css=EDITOR_CSS)
