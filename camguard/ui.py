@@ -9,7 +9,7 @@ import shutil
 import gradio as gr
 import numpy as np
 
-from camguard.config import FPS, MAX_SECONDS, TEMP_DIR
+from camguard.config import FPS, MAX_SECONDS, MAX_UPLOAD, TEMP_DIR
 from camguard.detection import load_model
 from camguard.pipeline import analyze
 from camguard.video import first_frame
@@ -157,4 +157,4 @@ def main() -> None:
     # ponytail: los videos de la última sesión quedan en disco hasta el próximo arranque.
     shutil.rmtree(TEMP_DIR, ignore_errors=True)
     load_model()  # al arrancar, para que el primer análisis no espere la carga
-    build_demo().launch(inbrowser=True)
+    build_demo().launch(inbrowser=True, max_file_size=MAX_UPLOAD)
