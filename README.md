@@ -31,9 +31,8 @@ Corre en una GPU gratuita compartida de Hugging Face (ZeroGPU), con una cuota di
 
 ## Privacidad
 
-- **En el link de Hugging Face, el video se procesa en sus servidores.** No subas grabaciones reales o sensibles ahí.
-- Para grabaciones reales, usá la versión que corre en tu PC: descargá el proyecto (en GitHub, **Code** → **Download ZIP**), descomprimilo y hacé doble clic en `run.bat` (Windows) o ejecutá `sh run.sh` (Mac / Linux). La primera vez descarga ~1 GB. Se abre en `http://127.0.0.1:7860`, solo se puede abrir desde esa computadora y el video no sale de ella.
-- En las dos versiones, los videos subidos y los resultados se guardan temporalmente (`%TEMP%\camguard` en Windows, `/tmp/camguard` en Linux / Mac): se borran a la hora y, por completo, cada vez que la app arranca.
+- **El video se procesa en servidores de Hugging Face.** No subas grabaciones reales o sensibles.
+- Los videos subidos y los resultados se guardan temporalmente en el servidor: se borran a la hora y, por completo, cada vez que la app arranca.
 - No se envía telemetría.
 
 ## Límites de esta versión
@@ -41,7 +40,7 @@ Corre en una GPU gratuita compartida de Hugging Face (ZeroGPU), con una cuota di
 - **Es una demo: no reemplaza la vigilancia humana.** Puede no detectar a personas lejanas, tapadas, agachadas o con poca luz, y no está probada contra alguien que intente evitar la cámara a propósito.
 - Videos de hasta 1 GB.
 
-- Analiza 5 cuadros por segundo y como máximo 60 s de video. En la versión local corre en CPU: unos 2 a 3 minutos para 60 s en 1080p.
+- Analiza 5 cuadros por segundo y como máximo 60 s de video.
 - Una persona cuenta como intrusa cuando **el centro de su cuerpo** está sobre la zona, tal como se ve en la imagen. En el video de ejemplo detecta al ~95% de la gente dentro de la zona y ~97% de las marcas son correctas.
 - Las personas muy lejanas, muy tapadas o en escenas oscuras pueden no detectarse. Si dos personas se cruzan, pueden intercambiar el número.
 - Solo detecta "persona". No distingue guardias de civiles ni detecta humo: eso queda para la próxima versión.

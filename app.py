@@ -1,4 +1,4 @@
-"""Punto de entrada de CamGuard: ``uv run python app.py`` (es lo que ejecutan run.bat y run.sh)."""
+"""Punto de entrada de CamGuard: lo ejecuta el Space; en la PC, ``uv run python app.py``."""
 
 import os
 

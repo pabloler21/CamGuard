@@ -51,7 +51,7 @@ EDITOR_CSS = ".pixi-target, .pixi-target-crop { overflow: hidden; }"
 # Hugging Face define SPACE_ID en todo Space; en la PC no existe.
 WHERE = (
     "> 🔒 **El video se procesa en servidores de Hugging Face.** No subas grabaciones reales o "
-    "sensibles: para eso está la versión que corre en tu PC (ver el README)."
+    "sensibles."
     if os.getenv("SPACE_ID")
     else "Todo corre en esta PC."
 )
