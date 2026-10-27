@@ -17,7 +17,7 @@ MAX_SECONDS = 60  # tope de video analizado
 CONF = 0.4  # confianza mínima para contar una detección
 MAX_GAP_S = 1.0  # si alguien "desaparece" menos que esto, sigue siendo el mismo evento
 PERSON_ID = 1  # id COCO de "person" en RF-DETR
-# ponytail: CPU-only (~0.3 s/cuadro); si es lento, exportar RF-DETR a ONNX + onnxruntime-directml
+# ponytail: CPU-only (~0.5 s/cuadro en 1080p); si es lento, exportar RF-DETR a ONNX + onnxruntime-directml
 
 model = None  # se carga en main(), así los tests no bajan el modelo
 
