@@ -12,18 +12,16 @@ from camguard.detection import load_model
 from camguard.pipeline import analyze
 from camguard.video import first_frame
 
-# Zona del video de ejemplo, en fracción de la imagen: de la mitad hacia la derecha
-# y del 55 % de la altura hacia abajo.
-EXAMPLE_ZONE_LEFT = 0.5
-EXAMPLE_ZONE_TOP = 0.55
+# Grosor del pincel, en píxeles del video (1920 de ancho en el ejemplo).
+BRUSH_SIZE = 60
 
 INSTRUCTIONS = f"""\
 # CamGuard — Intruso en zona
-**Para probar rápido:** ya viene cargado un video de ejemplo con la zona marcada. \
-Tocá **Analizar**.
-
-**Con tu propio video:** tocá la ✕ del video, subí el tuyo, pintá encima de la imagen \
-el área restringida y tocá **Analizar**.
+1. Ya viene cargado un video de ejemplo. Si querés usar uno propio, tocá la ✕ del video y \
+subí el tuyo.
+2. Pintá encima de la imagen de la derecha el área restringida. Si te equivocás, tocá \
+**Borrar zona** y volvé a pintar.
+3. Tocá **Analizar**.
 
 Se analizan {FPS} cuadros por segundo y hasta {MAX_SECONDS} s de video. Todo corre en esta PC.
 """
@@ -35,7 +33,7 @@ def editor_value(background: np.ndarray, layers: list[np.ndarray] | None = None)
 
 
 def load_example() -> tuple[str | None, dict | None]:
-    """Descarga el video de ejemplo (solo la primera vez) y le pinta una zona por defecto.
+    """Descarga el video de ejemplo (solo la primera vez), sin zona: la pinta quien prueba.
 
     El video es de Roboflow y no tiene una licencia clara, por eso se descarga en vez de
     incluirlo en el repo.
@@ -49,15 +47,16 @@ def load_example() -> tuple[str | None, dict | None]:
         path = download_assets(VideoAssets.PEOPLE_WALKING, directory="examples")
     except Exception:  # sin internet: la app arranca igual, sin ejemplo
         return None, None
-    background = first_frame(path)
-    h, w = background.shape[:2]
-    layer = np.zeros((h, w, 4), np.uint8)
-    layer[int(h * EXAMPLE_ZONE_TOP) :, int(w * EXAMPLE_ZONE_LEFT) :] = (255, 0, 0, 255)
-    return path, editor_value(background, [layer])
+    return path, editor_value(first_frame(path))
 
 
-def on_upload(video_path: str) -> dict:
-    """Al subir un video, pone su primer cuadro en el editor para pintar la zona."""
+def blank_zone(video_path: str | None) -> dict:
+    """Pone el primer cuadro del video en el editor, sin nada pintado.
+
+    Se usa al subir un video y al tocar "Borrar zona".
+    """
+    if not video_path:
+        raise gr.Error("Primero subí un video.")
     try:
         return editor_value(first_frame(video_path))
     except ValueError as e:
@@ -92,13 +91,15 @@ def build_demo() -> gr.Blocks:
         gr.Markdown(INSTRUCTIONS)
         with gr.Row():
             video = gr.Video(value=example_video, label="Video", sources=["upload"])
-            editor = gr.ImageEditor(
-                value=example_editor,
-                label="Zona restringida (pintá encima)",
-                type="numpy",
-                sources=[],  # la imagen siempre es el primer cuadro del video
-                brush=gr.Brush(default_size=120, colors=["#ff0000"], color_mode="fixed"),
-            )
+            with gr.Column():
+                editor = gr.ImageEditor(
+                    value=example_editor,
+                    label="Zona restringida (pintá encima)",
+                    type="numpy",
+                    sources=[],  # la imagen siempre es el primer cuadro del video
+                    brush=gr.Brush(default_size=BRUSH_SIZE, colors=["#ff0000"], color_mode="fixed"),
+                )
+                clear = gr.Button("Borrar zona", size="sm")
         run = gr.Button("Analizar", variant="primary")
         result = gr.Video(label="Resultado")
         table = gr.Dataframe(
@@ -106,7 +107,8 @@ def build_demo() -> gr.Blocks:
         )
         gallery = gr.Gallery(label="Momento de entrada de cada intruso", columns=4)
 
-        video.upload(on_upload, video, editor)
+        video.upload(blank_zone, video, editor)
+        clear.click(blank_zone, video, editor)
         run.click(on_analyze, [video, editor], [result, table, gallery])
     return demo
 

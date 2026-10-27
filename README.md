@@ -12,8 +12,9 @@ Subís un video de una cámara, pintás el área restringida y la demo marca qui
 
    La primera vez tarda unos minutos, porque descarga Python, las librerías y el modelo (~1 GB en total). Después arranca en segundos.
 3. Se abre el navegador en `http://127.0.0.1:7860`. Si no se abre solo, copiá esa dirección.
-4. Ya viene cargado un **video de ejemplo con la zona marcada**: tocá **Analizar** y en menos de un minuto ves el resultado.
-5. Para probar con un video propio: tocá la ✕ del video, subí el tuyo, pintá en rojo la zona restringida sobre la imagen de la derecha y tocá **Analizar**.
+4. Ya viene cargado un **video de ejemplo**. Si preferís uno propio, tocá la ✕ del video y subí el tuyo.
+5. Pintá en rojo la zona restringida sobre la imagen de la derecha. Si te equivocás, tocá **Borrar zona** (o la flecha ↶ para deshacer el último trazo) y volvé a pintar.
+6. Tocá **Analizar**. Con el video de ejemplo, el resultado tarda menos de un minuto.
 
 Para cerrarla, cerrá la ventana negra (la terminal).
 
