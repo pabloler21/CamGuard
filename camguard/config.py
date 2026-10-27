@@ -10,8 +10,10 @@ FPS = 5
 MAX_SECONDS = 60
 
 # Confianza mínima para contar una detección. Más bajo aparecen "personas" falsas;
-# más alto se pierden las que están lejos.
-CONF = 0.4
+# más alto se pierden las que están lejos. Con cámaras altas el modelo da confianzas bajas
+# incluso a personas claras: en el video de ejemplo, 0.4 detectaba al 70% de la gente dentro
+# de la zona y 0.25 al 96%, sin sumar falsos (medido contra RF-DETR Large como referencia).
+CONF = 0.25
 
 # Si alguien "desaparece" de la zona menos que esto (el detector lo pierde un cuadro, alguien
 # le pasa por delante), sigue siendo el mismo evento en vez de partirse en varios.
