@@ -13,7 +13,7 @@ Subís un video de una cámara, pintás el área restringida y la demo marca qui
    La primera vez tarda unos minutos, porque descarga Python, las librerías y el modelo (~1 GB en total). Después arranca en segundos.
 3. Se abre el navegador en `http://127.0.0.1:7860`. Si no se abre solo, copiá esa dirección.
 4. Ya viene cargado un **video de ejemplo**. Si preferís uno propio, tocá la ✕ del video y subí el tuyo.
-5. Pintá en rojo la zona restringida sobre la imagen de la derecha. Si te equivocás, tocá **Borrar zona** (o la flecha ↶ para deshacer el último trazo) y volvé a pintar.
+5. Marcá en rojo la zona restringida sobre la imagen de la derecha: podés pintarla entera o solo dibujar su contorno (se rellena sola). Si te equivocás, tocá **Borrar zona** (o la flecha ↶ para deshacer el último trazo) y volvé a pintar.
 6. Tocá **Analizar**. Con el video de ejemplo, el resultado tarda menos de un minuto.
 
 Para cerrarla, cerrá la ventana negra (la terminal).
@@ -27,7 +27,7 @@ Para cerrarla, cerrá la ventana negra (la terminal).
 ## Límites de esta versión
 
 - Analiza 5 cuadros por segundo y como máximo 60 s de video. Corre en CPU: unos 2 a 3 minutos para 60 s en 1080p.
-- Una persona cuenta como intrusa cuando **sus pies** están dentro de la zona.
+- Una persona cuenta como intrusa cuando **el centro de su cuerpo** está sobre la zona, tal como se ve en la imagen. En el video de ejemplo detecta al ~95% de la gente dentro de la zona y ~97% de las marcas son correctas.
 - Las personas muy lejanas, muy tapadas o en escenas oscuras pueden no detectarse. Si dos personas se cruzan, pueden intercambiar el número.
 - Solo detecta "persona". No distingue guardias de civiles ni detecta humo: eso queda para la próxima versión.
 
@@ -47,7 +47,7 @@ uv run ruff format .      # formatear
 | Módulo | Qué hace |
 |---|---|
 | `config.py` | Perillas ajustables: `FPS`, `MAX_SECONDS`, `CONF`, `MAX_GAP_S` |
-| `zone.py` | Convierte lo pintado en una máscara y decide quién tiene los pies adentro |
+| `zone.py` | Convierte lo pintado en una máscara (rellena contornos) y decide quién está adentro |
 | `events.py` | Agrupa cuadros en eventos de entrada y salida (`Event`) |
 | `video.py` | Lectura submuestreada y escritura H.264 |
 | `detection.py` | RF-DETR + ByteTrack: personas con número de seguimiento |
