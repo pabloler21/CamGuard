@@ -24,7 +24,16 @@ Para cerrarla, cerrá la ventana negra (la terminal).
 - Una tabla con cada entrada a la zona: ID, segundo de entrada, segundo de salida y duración.
 - Una captura del momento en que entró cada intruso.
 
+## Privacidad
+
+- Todo corre en tu PC: el video no se sube a ningún servidor y la página solo se puede abrir desde la misma computadora.
+- Los videos subidos y los resultados se guardan temporalmente en `%TEMP%\camguard` (Windows) o `/tmp/camguard`. Se borran a la hora y, por completo, cada vez que se vuelve a abrir la app. Los de la última sesión quedan hasta el próximo arranque.
+- No se envía telemetría.
+
 ## Límites de esta versión
+
+- **Es una demo: no reemplaza la vigilancia humana.** Puede no detectar a personas lejanas, tapadas, agachadas o con poca luz, y no está probada contra alguien que intente evitar la cámara a propósito.
+- Videos de hasta 1 GB.
 
 - Analiza 5 cuadros por segundo y como máximo 60 s de video. Corre en CPU: unos 2 a 3 minutos para 60 s en 1080p.
 - Una persona cuenta como intrusa cuando **el centro de su cuerpo** está sobre la zona, tal como se ve en la imagen. En el video de ejemplo detecta al ~95% de la gente dentro de la zona y ~97% de las marcas son correctas.
