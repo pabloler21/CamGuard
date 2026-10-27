@@ -17,7 +17,7 @@ class FakeTracker:
         self.frame = 0
 
     def update(self, frame_bgr):
-        x = 75 if 2 <= self.frame <= 5 else 25  # pies en (x, 75)
+        x = 75 if 2 <= self.frame <= 5 else 25  # centro del cuerpo en (x, 65)
         self.frame += 1
         # Como el tracker real: solo personas (class_id = PERSON_ID) y con número de seguimiento.
         return sv.Detections(
@@ -54,6 +54,26 @@ def test_analyze_detects_the_intrusion(video, zone_layers):
     assert probe(result.video_path).frame_count == 10
     assert len(progress) == 10
     assert progress[-1] == 1.0
+
+
+class StraddlingTracker:
+    """Una persona parada sobre el borde de arriba: pies apenas adentro, cuerpo afuera."""
+
+    def __init__(self, fps):
+        pass
+
+    def update(self, frame_bgr):
+        return sv.Detections(
+            xyxy=np.array([[65.0, 20.0, 85.0, 55.0]]),  # centro en y=37 (afuera); pies en y=55
+            class_id=np.array([PERSON_ID]),
+            tracker_id=np.array([1]),
+        )
+
+
+def test_person_counts_by_body_center_not_feet(video, zone_layers):
+    # En la imagen se la ve afuera de la zona, que es lo que importa a quien mira el video.
+    result = analyze(video, zone_layers, make_tracker=StraddlingTracker)
+    assert result.events == []
 
 
 def test_analyze_respects_max_seconds(video, zone_layers, monkeypatch):

@@ -36,7 +36,7 @@ def build_events(
 
     Args:
         frames_in_zone: Para cada persona, los índices (crecientes) de los cuadros analizados
-            en que tuvo los pies en la zona.
+            en que estuvo sobre la zona.
         fps: Cuadros analizados por segundo, para pasar de índices a segundos.
         max_gap_s: Tolerancia en segundos antes de considerar que la persona salió.
 

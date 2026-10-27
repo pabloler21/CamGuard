@@ -19,7 +19,7 @@ from camguard.config import FPS, MAX_SECONDS
 from camguard.detection import PersonTracker
 from camguard.events import Event, build_events
 from camguard.video import H264Writer, frame_limit, probe, sample_frames, sampling_step
-from camguard.zone import feet_in_zone, zone_from_layers
+from camguard.zone import points_in_zone, zone_from_layers
 
 
 class Tracker(Protocol):
@@ -100,8 +100,9 @@ def analyze(
     with H264Writer(out_path, fps, info.width, info.height) as writer:
         for i, frame in enumerate(sample_frames(video_path, step, max_frames)):
             detections = tracker.update(frame)
-            feet = detections.get_anchors_coordinates(sv.Position.BOTTOM_CENTER)
-            inside = feet_in_zone(feet, zone)
+            # Intruso = el centro de su cuerpo está sobre la zona (ver points_in_zone).
+            centers = detections.get_anchors_coordinates(sv.Position.CENTER)
+            inside = points_in_zone(centers, zone)
             annotated = annotate(frame, detections, inside, zone)
             for track_id in detections.tracker_id[inside].tolist():
                 if track_id not in frames_in_zone:

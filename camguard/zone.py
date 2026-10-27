@@ -1,4 +1,4 @@
-"""Zona restringida: de lo que pinta el usuario a una máscara, y quién la pisa.
+"""Zona restringida: de lo que pinta el usuario a una máscara, y quién está sobre ella.
 
 La zona es una máscara booleana del tamaño del video (True = restringido) en vez de un
 polígono, porque el usuario la pinta a mano: puede tener cualquier forma o ser varias zonas.
@@ -79,22 +79,23 @@ def fill_outlines(mask: np.ndarray) -> np.ndarray:
     return cv2.erode(filled, _disk(half_stroke)).astype(bool)
 
 
-def feet_in_zone(feet_xy: np.ndarray, zone: np.ndarray) -> np.ndarray:
-    """Indica qué personas tienen los pies dentro de la zona.
+def points_in_zone(points_xy: np.ndarray, zone: np.ndarray) -> np.ndarray:
+    """Indica qué puntos caen dentro de la zona.
 
-    Se usan los pies (centro del borde inferior del recuadro) y no el recuadro entero porque,
-    con la cámara en perspectiva, alguien que pasa delante de una puerta la tapa con el cuerpo
-    sin estar en ella: los pies dicen dónde está parado de verdad.
+    El pipeline pasa el centro del recuadro de cada persona: es lo que usa el ojo para decir
+    si alguien "está" sobre la zona en la imagen. Primero se usaron los pies, más fieles a
+    dónde pisa, pero con la cámara en ángulo marcaban como intruso a quien tenía el cuerpo
+    afuera y apenas pisaba el borde, y al revés (7 de ~30 errores en cuadros del ejemplo).
 
     Args:
-        feet_xy: Array (N, 2) con las coordenadas (x, y) de los pies de cada persona.
+        points_xy: Array (N, 2) con coordenadas (x, y), una por persona.
         zone: Máscara booleana (alto, ancho).
 
     Returns:
-        Array booleano (N,): True si los pies de esa persona caen en la zona.
+        Array booleano (N,): True si ese punto cae en la zona.
     """
     h, w = zone.shape
     # clip: un punto justo en el borde (x == ancho) se saldría del array al indexar.
-    x = np.clip(feet_xy[:, 0].astype(int), 0, w - 1)
-    y = np.clip(feet_xy[:, 1].astype(int), 0, h - 1)
+    x = np.clip(points_xy[:, 0].astype(int), 0, w - 1)
+    y = np.clip(points_xy[:, 1].astype(int), 0, h - 1)
     return zone[y, x]

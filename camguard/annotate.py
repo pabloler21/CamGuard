@@ -15,7 +15,7 @@ def annotate(
     Args:
         frame_bgr: Cuadro original en BGR. No se modifica.
         detections: Personas detectadas, con ``tracker_id``.
-        inside: Array booleano: True para las personas con los pies en la zona.
+        inside: Array booleano: True para las personas que están sobre la zona.
         zone: Máscara booleana de la zona.
 
     Returns:

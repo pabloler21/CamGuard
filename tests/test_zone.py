@@ -4,7 +4,7 @@ import cv2
 import numpy as np
 import pytest
 
-from camguard.zone import feet_in_zone, fill_outlines, zone_from_layers
+from camguard.zone import fill_outlines, points_in_zone, zone_from_layers
 
 
 def outline(gap=0):
@@ -67,7 +67,7 @@ def zone():
 
 
 @pytest.mark.parametrize(
-    ("feet", "expected"),
+    ("point", "expected"),
     [
         pytest.param((7, 7), True, id="adentro"),
         pytest.param((2, 2), False, id="afuera"),
@@ -77,12 +77,12 @@ def zone():
         pytest.param((50, 50), True, id="fuera-de-la-imagen-se-lleva-al-borde"),
     ],
 )
-def test_feet_in_zone(zone, feet, expected):
-    assert feet_in_zone(np.array([feet]), zone).tolist() == [expected]
+def test_points_in_zone(zone, point, expected):
+    assert points_in_zone(np.array([point]), zone).tolist() == [expected]
 
 
-def test_feet_in_zone_without_people(zone):
-    assert feet_in_zone(np.empty((0, 2)), zone).tolist() == []
+def test_points_in_zone_without_people(zone):
+    assert points_in_zone(np.empty((0, 2)), zone).tolist() == []
 
 
 def test_zone_from_layers_combines_all_layers():
