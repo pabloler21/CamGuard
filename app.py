@@ -63,6 +63,22 @@ def first_frame(video_path):
     return {"background": frame[:, :, ::-1], "layers": [], "composite": None}
 
 
+def example():
+    """Video de ejemplo (se baja la primera vez) con una zona ya pintada abajo a la derecha."""
+    from supervision.assets import VideoAssets, download_assets
+
+    try:
+        path = download_assets(VideoAssets.PEOPLE_WALKING, directory="examples")
+    except Exception:  # sin internet: arranca sin ejemplo
+        return None, None
+    editor = first_frame(path)
+    h, w = editor["background"].shape[:2]
+    layer = np.zeros((h, w, 4), np.uint8)
+    layer[int(h * 0.55) :, w // 2 :] = (255, 0, 0, 255)
+    editor["layers"] = [layer]
+    return path, editor
+
+
 def draw(frame, det, inside, zone):
     out = frame.copy()
     out[zone] = (0.6 * out[zone] + 0.4 * np.array([0, 0, 255])).astype(np.uint8)  # rojo (BGR)
@@ -122,3 +138,40 @@ def analyze(video_path, editor, progress=gr.Progress()):
     if not rows:
         gr.Info("No hubo intrusiones en la zona.")
     return out_path, rows, snapshots
+
+
+def main():
+    global model
+    from rfdetr import RFDETRSmall
+
+    model = RFDETRSmall()
+    example_video, example_zone = example()
+    with gr.Blocks(title="CamGuard") as demo:
+        gr.Markdown(
+            "# CamGuard — Intruso en zona\n"
+            "**Para probar rápido:** ya viene cargado un video de ejemplo con la zona marcada. Tocá **Analizar**.\n\n"
+            "**Con tu propio video:** tocá la ✕ del video, subí el tuyo, pintá encima de la imagen el área "
+            "restringida y tocá **Analizar**.\n\n"
+            f"Se analizan {FPS} cuadros por segundo y hasta {MAX_SECONDS} s de video. Todo corre en esta PC."
+        )
+        with gr.Row():
+            video = gr.Video(value=example_video, label="Video", sources=["upload"])
+            editor = gr.ImageEditor(
+                value=example_zone,
+                label="Zona restringida (pintá encima)",
+                type="numpy",
+                sources=[],
+                brush=gr.Brush(default_size=120, colors=["#ff0000"], color_mode="fixed"),
+            )
+        run = gr.Button("Analizar", variant="primary")
+        result = gr.Video(label="Resultado")
+        table = gr.Dataframe(headers=["ID", "Entró (s)", "Salió (s)", "Duración (s)"], label="Eventos")
+        gallery = gr.Gallery(label="Momento de entrada de cada intruso", columns=4)
+
+        video.upload(first_frame, video, editor)
+        run.click(analyze, [video, editor], [result, table, gallery])
+    demo.launch(inbrowser=True)
+
+
+if __name__ == "__main__":
+    main()
