@@ -27,6 +27,27 @@ def load_model():
     return RFDETRSmall()
 
 
+def new_bytetrack(fps: float, conf: float = CONF) -> ByteTrackTracker:
+    """Crea el tracker ByteTrack configurado para la demo.
+
+    Args:
+        fps: Cuadros por segundo que va a recibir (los analizados, no los del archivo). ByteTrack
+            lo usa para saber cuánto tiempo "recordar" a una persona que dejó de verse.
+        conf: Confianza mínima para empezar a seguir a una persona.
+    """
+    # ByteTrack trae dos umbrales propios más exigentes que CONF: el de activación (0.7) y el de
+    # "detección de alta confianza" (0.6), que es el único que puede crear un seguimiento nuevo.
+    # Si no se alinean con CONF, una persona detectada con 0.4-0.6 nunca recibe número y no se
+    # muestra (en el video de ejemplo se perdía el 31% de las detecciones).
+    # minimum_consecutive_frames=1 les da número desde el primer cuadro en que aparecen.
+    return ByteTrackTracker(
+        frame_rate=fps,
+        track_activation_threshold=conf,
+        high_conf_det_threshold=conf,
+        minimum_consecutive_frames=1,
+    )
+
+
 class PersonTracker:
     """Detecta personas en cada cuadro y les asigna un número de seguimiento estable.
 
@@ -41,11 +62,7 @@ class PersonTracker:
     def __init__(self, fps: float, conf: float = CONF):
         self._model = load_model()
         self._conf = conf
-        # El umbral de activación por defecto (0.7) tardaría en "confirmar" a las personas,
-        # y minimum_consecutive_frames=1 les da número desde el primer cuadro en que aparecen.
-        self._tracker = ByteTrackTracker(
-            frame_rate=fps, track_activation_threshold=conf, minimum_consecutive_frames=1
-        )
+        self._tracker = new_bytetrack(fps, conf)
 
     def update(self, frame_bgr: np.ndarray) -> sv.Detections:
         """Procesa el siguiente cuadro del video.
