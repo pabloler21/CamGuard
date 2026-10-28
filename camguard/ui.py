@@ -5,7 +5,6 @@ el usuario y los resultados en una tabla (con la foto de cada intruso) y el vide
 """
 
 import base64
-import os
 import shutil
 
 import cv2
@@ -13,7 +12,7 @@ import gradio as gr
 import numpy as np
 import spaces
 
-from camguard.config import FPS, MAX_SECONDS, MAX_UPLOAD, TEMP_DIR
+from camguard.config import MAX_UPLOAD, TEMP_DIR
 from camguard.detection import load_model
 from camguard.pipeline import AnalysisResult, analyze
 from camguard.video import first_frame
@@ -48,18 +47,49 @@ REFIT_EDITOR_JS = """() => {
 # El lienzo de la herramienta de recorte del mismo editor mide el doble de su recuadro aunque no
 # se use: se sale y la página queda desplazable a los costados; al arrastrar cerca del borde se
 # corre entera y el trazo cae fuera de la imagen. Recortar lo que sobresale lo evita.
-EDITOR_CSS = ".pixi-target, .pixi-target-crop { overflow: hidden; }"
-
-# La página se explica sola: esto son conceptos, plegados para quien quiera saber más.
-# Hugging Face define SPACE_ID en todo Space; en la PC no existe.
-ABOUT = f"""\
-- Es intruso quien tiene el centro del cuerpo sobre la zona.
-- Se analizan {FPS} cuadros por segundo y hasta {MAX_SECONDS} s de video.
-- Si alguien entró en el segundo 0, ya estaba en la zona cuando empezó el video.
-- Puede no detectar a personas lejanas, tapadas, agachadas o con poca luz: no reemplaza la \
-vigilancia humana.
-{"- El video se procesa en servidores de Hugging Face." if os.getenv("SPACE_ID") else ""}
+EDITOR_CSS = """
+.pixi-target, .pixi-target-crop { overflow: hidden; }
+#camguard-hint {
+    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    pointer-events: none; z-index: 10; transition: opacity .3s;
+}
+#camguard-hint.hidden { opacity: 0; }
+#camguard-hint svg { width: 40%; max-width: 260px; filter: drop-shadow(0 1px 3px #0008); }
 """
+
+# Sin texto, la imagen de la zona no dice que hay que pintar encima: un pincel pinta en loop un
+# área sobre la imagen. Se va al primer trazo y vuelve cuando la zona se borra
+# (botón o video nuevo). Va encima del editor y deja pasar los clics (pointer-events: none).
+ZONE_HINT_JS = """() => {
+    const block = document.getElementById("zona");
+    if (!block) return;
+    let hint = document.getElementById("camguard-hint");
+    if (!hint) {
+        // Ida y vuelta, con trazos que se tocan: se ve un área pintada, no un contorno.
+        const path = "M40,30 H180 V55 H40 V80 H180 V105 H40";
+        hint = document.createElement("div");
+        hint.id = "camguard-hint";
+        hint.innerHTML = `<svg viewBox="0 0 220 130">
+            <path d="${path}" pathLength="1" fill="none" stroke="#ff0000" stroke-opacity=".7"
+                stroke-width="28" stroke-linecap="round" stroke-linejoin="round"
+                stroke-dasharray="1">
+                <animate attributeName="stroke-dashoffset" values="1;0;0" keyTimes="0;.7;1"
+                    dur="3s" repeatCount="indefinite"/>
+            </path>
+            <circle r="9" fill="#ff0000" stroke="#fff" stroke-width="3">
+                <animateMotion path="${path}" keyPoints="0;1;1" keyTimes="0;.7;1"
+                    calcMode="linear" dur="3s" repeatCount="indefinite"/>
+            </circle></svg>`;
+        block.appendChild(hint);
+        block.addEventListener("pointerdown", (e) => {
+            if (e.target.closest(".pixi-target")) hint.classList.add("hidden");
+        }, true);
+    }
+    hint.classList.remove("hidden");
+}"""
+
+# Al cargar la página y cada vez que la zona vuelve a quedar en blanco.
+ZONE_RESET_JS = f"() => {{ ({REFIT_EDITOR_JS})(); ({ZONE_HINT_JS})(); }}"
 
 HEADERS = ["ID", "Entró (s)", "Salió (s)", "Duración (s)", "Foto"]
 
@@ -166,7 +196,11 @@ def on_analyze(video_path: str | None, editor: dict | None):
         yield (gr.skip(),) * 3
         return
 
-    yield table_rows(result), gr.Video(value=None, visible=False), gr.skip()
+    yield (
+        gr.Dataframe(table_rows(result), visible=True),
+        gr.Video(value=None, visible=False),
+        gr.skip(),
+    )
     shown, label = len(result.events), ""
     for result in results:
         if len(result.events) != shown:
@@ -189,14 +223,13 @@ def build_demo() -> gr.Blocks:
     # una app que maneja grabaciones de seguridad no debería hablar con nadie).
     with gr.Blocks(title="CamGuard", analytics_enabled=False, delete_cache=CACHE_CLEANUP) as demo:
         gr.Markdown("# CamGuard — Intruso en zona")
-        with gr.Accordion("Sobre esta demo", open=False):
-            gr.Markdown(ABOUT)
         with gr.Row():
             video = gr.Video(value=example_video, label="Video", sources=["upload"])
             with gr.Column():
                 editor = gr.ImageEditor(
                     value=example_editor,
                     label="Zona restringida",
+                    elem_id="zona",  # ahí se dibuja ZONE_HINT_JS
                     type="numpy",
                     sources=[],  # la imagen siempre es el primer cuadro del video
                     brush=gr.Brush(default_size=BRUSH_SIZE, colors=["#ff0000"], color_mode="fixed"),
@@ -207,6 +240,7 @@ def build_demo() -> gr.Blocks:
             headers=HEADERS,
             datatype=["number", "number", "number", "number", "html"],
             label="Intrusos",
+            visible=False,  # hasta analizar: vacía era ruido
             interactive=False,
             wrap=True,
             max_height="none",  # la página crece con la tabla, en vez de un scroll adentro
@@ -214,9 +248,9 @@ def build_demo() -> gr.Blocks:
         # Oculto hasta que termina el análisis: vacío parecía roto.
         result = gr.Video(label="Video analizado", visible=False)
 
-        demo.load(None, js=REFIT_EDITOR_JS)
-        video.upload(blank_zone, video, editor).then(None, js=REFIT_EDITOR_JS)
-        clear.click(blank_zone, video, editor).then(None, js=REFIT_EDITOR_JS)
+        demo.load(None, js=ZONE_RESET_JS)
+        video.upload(blank_zone, video, editor).then(None, js=ZONE_RESET_JS)
+        clear.click(blank_zone, video, editor).then(None, js=ZONE_RESET_JS)
         # El avance se ve en el botón, que queda deshabilitado mientras analiza. Las barras de
         # progreso de Gradio iban una por resultado, y la de la tabla tapaba las filas nuevas.
         run.click(lambda: gr.Button("Analizando…", interactive=False), None, run, queue=False).then(
