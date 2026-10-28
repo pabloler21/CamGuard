@@ -58,6 +58,8 @@ REFIT_EDITOR_JS = """() => {
 # Las barras del editor (zoom, pincel, color, tamaño) se ocultan: solo se pinta, y deshacer es
 # un botón de abajo. El recuadro toma la proporción de un video común (16:9) para medir
 # lo mismo que el video de al lado; si el video es de otra proporción, quedan bordes.
+# La tabla de intrusos también toma 16:9 para medir lo mismo que el video analizado: con más
+# intrusos de los que entran, scrollea adentro (34 px son los de su título).
 EDITOR_CSS = """
 .pixi-target, .pixi-target-crop { overflow: hidden; }
 #zona .top-panel, #zona .toolbar-wrap { display: none !important; }
@@ -68,6 +70,8 @@ EDITOR_CSS = """
 }
 #camguard-hint.hidden { opacity: 0; }
 #camguard-hint svg { width: 40%; max-width: 260px; filter: drop-shadow(0 1px 3px #0008); }
+#intrusos { aspect-ratio: 16 / 9; container-type: inline-size; }
+#intrusos .virtual-table-viewport { max-height: calc(56.25cqw - 34px) !important; }
 """
 
 # Sin texto, la imagen de la zona no dice que hay que pintar encima: un pincel pinta en loop un
@@ -239,12 +243,12 @@ def build_demo() -> gr.Blocks:
         with gr.Row():
             with gr.Column():
                 # Solo se reproduce: se cambia con el botón, más visible que la ✕ del componente.
-                video = gr.Video(value=example_video, label="Video", interactive=False)
+                video = gr.Video(value=example_video, label="Input Video", interactive=False)
                 upload = gr.UploadButton("Subir mi video", file_types=["video"], size="sm")
             with gr.Column():
                 editor = gr.ImageEditor(
                     value=example_editor,
-                    label="Zona restringida",
+                    label="Draw Restricted Area",
                     elem_id="zona",  # ahí se dibuja ZONE_HINT_JS
                     type="numpy",
                     sources=[],  # la imagen siempre es el primer cuadro del video
@@ -256,17 +260,22 @@ def build_demo() -> gr.Blocks:
                 )
                 undo = gr.Button("Deshacer", size="sm")
         run = gr.Button("Analizar", variant="primary")
-        table = gr.Dataframe(
-            headers=HEADERS,
-            datatype=["number", "number", "number", "number", "html"],
-            label="Intrusos",
-            visible=False,  # hasta analizar: vacía era ruido
-            interactive=False,
-            wrap=True,
-            max_height="none",  # la página crece con la tabla, en vez de un scroll adentro
-        )
-        # Oculto hasta que termina el análisis: vacío parecía roto.
-        result = gr.Video(label="Video analizado", visible=False)
+        # Lado a lado, como la fila de arriba: con la tabla arriba del video había que scrollear
+        # para verlo. Si hay más intrusos de los que entran, la tabla scrollea adentro.
+        with gr.Row():
+            with gr.Column():
+                table = gr.Dataframe(
+                    headers=HEADERS,
+                    datatype=["number", "number", "number", "number", "html"],
+                    label="Intruder Table",
+                    elem_id="intrusos",  # EDITOR_CSS le da el alto del video de al lado
+                    visible=False,  # hasta analizar: vacía era ruido
+                    interactive=False,
+                    wrap=True,
+                )
+            with gr.Column():
+                # Oculto hasta que termina el análisis: vacío parecía roto.
+                result = gr.Video(label="Output Video", visible=False)
 
         demo.load(None, js=ZONE_RESET_JS)
         upload.upload(use_video, upload, [video, editor, table, result]).then(
