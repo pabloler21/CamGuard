@@ -2,7 +2,7 @@ import gradio as gr
 import numpy as np
 import pytest
 
-from camguard.ui import blank_zone, on_analyze
+from camguard.ui import on_analyze, use_video
 from camguard.video import H264Writer
 
 # Que falte un paso (sin video, sin zona) no es un error de la app: tiene que mostrarse como
@@ -30,6 +30,8 @@ def test_analyze_without_zone_warns_and_skips_outputs(video):
         assert list(on_analyze(video, {"layers": []})) == [(gr.skip(),) * 3]
 
 
-def test_clear_zone_without_video_warns_and_skips_editor():
-    with pytest.warns(UserWarning, match="Primero subí un video"):
-        assert blank_zone(None) == gr.skip()
+def test_unreadable_upload_warns_and_keeps_everything(tmp_path):
+    path = tmp_path / "roto.mp4"
+    path.write_bytes(b"no es un video")
+    with pytest.warns(UserWarning):
+        assert use_video(str(path)) == (gr.skip(),) * 4

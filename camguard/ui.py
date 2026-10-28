@@ -28,7 +28,8 @@ CACHE_CLEANUP = (1800, 3600)
 # ancho y se ve corrida a la derecha, cortada, sin poder pintar encima. Ajusta el lienzo al
 # recuadro y vuelve a encuadrar la imagen; se repite unos segundos para cubrir la carga lenta de
 # la imagen, y al cambiar el zoom o el tamaño de la ventana. window.editor es interno de Gradio:
-# si deja de existir, no hace nada.
+# si deja de existir, no hace nada. Encuadra sin el margen de 30 px que el editor deja alrededor:
+# sin sus barras de herramientas no hace falta, y la imagen se veía chica.
 REFIT_EDITOR_JS = """() => {
     if (!window.camguardRefit) {
         window.camguardRefit = () => {
@@ -36,10 +37,17 @@ REFIT_EDITOR_JS = """() => {
                 const editor = window.editor;
                 const box = editor.target_element.getBoundingClientRect();
                 editor.resize_canvas(box.width, box.height);
-                editor.tools.get("zoom").set_zoom("fit");
+                const zoom = editor.tools.get("zoom");
+                zoom.border_padding = 0;
+                zoom.set_zoom("fit");
             } catch {}
         };
         window.addEventListener("resize", () => setTimeout(window.camguardRefit, 100));
+        // El editor se queda con la rueda del mouse: con el puntero encima, la página no
+        // scrolleaba. Se corta antes de que le llegue (el zoom no hace falta).
+        document.getElementById("zona")?.addEventListener(
+            "wheel", (e) => e.stopPropagation(), true
+        );
     }
     for (const ms of [300, 1000, 2500, 5000]) setTimeout(window.camguardRefit, ms);
 }"""
@@ -47,8 +55,13 @@ REFIT_EDITOR_JS = """() => {
 # El lienzo de la herramienta de recorte del mismo editor mide el doble de su recuadro aunque no
 # se use: se sale y la página queda desplazable a los costados; al arrastrar cerca del borde se
 # corre entera y el trazo cae fuera de la imagen. Recortar lo que sobresale lo evita.
+# Las barras del editor (zoom, pincel, color, tamaño) se ocultan: solo se pinta, y deshacer es
+# un botón de abajo. El recuadro toma la proporción de un video común (16:9) para medir
+# lo mismo que el video de al lado; si el video es de otra proporción, quedan bordes.
 EDITOR_CSS = """
 .pixi-target, .pixi-target-crop { overflow: hidden; }
+#zona .top-panel, #zona .toolbar-wrap { display: none !important; }
+#zona .image-container { aspect-ratio: 16 / 9; }
 #camguard-hint {
     position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
     pointer-events: none; z-index: 10; transition: opacity .3s;
@@ -58,8 +71,8 @@ EDITOR_CSS = """
 """
 
 # Sin texto, la imagen de la zona no dice que hay que pintar encima: un pincel pinta en loop un
-# área sobre la imagen. Se va al primer trazo y vuelve cuando la zona se borra
-# (botón o video nuevo). Va encima del editor y deja pasar los clics (pointer-events: none).
+# área sobre la imagen. Se va al primer trazo y vuelve con un video nuevo. Va encima del editor
+# y deja pasar los clics (pointer-events: none).
 ZONE_HINT_JS = """() => {
     const block = document.getElementById("zona");
     if (!block) return;
@@ -129,22 +142,19 @@ def warn(message: str) -> None:
     gr.Warning(message)
 
 
-def blank_zone(video_path: str | None):
-    """Pone el primer cuadro del video en el editor, sin nada pintado.
-
-    Se usa al subir un video y al tocar "Borrar zona".
+def use_video(video_path: str):
+    """Cambia al video subido con "Subir mi video": zona en blanco y sin los resultados del otro.
 
     Returns:
-        El valor del editor, o ``gr.skip()`` (no lo cambia) si no hay un video legible.
+        (video, editor, tabla, video analizado), o ``gr.skip()`` en los cuatro (deja todo como
+        estaba) si el video no se puede leer.
     """
-    if not video_path:
-        warn("Primero subí un video.")
-        return gr.skip()
     try:
-        return editor_value(first_frame(video_path))
+        frame = first_frame(video_path)
     except ValueError as e:
         warn(str(e))
-        return gr.skip()
+        return (gr.skip(),) * 4
+    return video_path, editor_value(frame), gr.Dataframe(visible=False), gr.Video(visible=False)
 
 
 def photo_html(image_rgb: np.ndarray) -> str:
@@ -222,9 +232,15 @@ def build_demo() -> gr.Blocks:
     # analytics_enabled=False: Gradio manda telemetría de uso por defecto (no los videos, pero
     # una app que maneja grabaciones de seguridad no debería hablar con nadie).
     with gr.Blocks(title="CamGuard", analytics_enabled=False, delete_cache=CACHE_CLEANUP) as demo:
-        gr.Markdown("# CamGuard — Intruso en zona")
+        gr.Markdown(
+            "# CamGuard\nDetecta quién entra a una zona restringida de tus cámaras, cuándo y por "
+            "cuánto tiempo."
+        )
         with gr.Row():
-            video = gr.Video(value=example_video, label="Video", sources=["upload"])
+            with gr.Column():
+                # Solo se reproduce: se cambia con el botón, más visible que la ✕ del componente.
+                video = gr.Video(value=example_video, label="Video", interactive=False)
+                upload = gr.UploadButton("Subir mi video", file_types=["video"], size="sm")
             with gr.Column():
                 editor = gr.ImageEditor(
                     value=example_editor,
@@ -233,8 +249,12 @@ def build_demo() -> gr.Blocks:
                     type="numpy",
                     sources=[],  # la imagen siempre es el primer cuadro del video
                     brush=gr.Brush(default_size=BRUSH_SIZE, colors=["#ff0000"], color_mode="fixed"),
+                    eraser=False,
+                    transforms=(),
+                    layers=False,
+                    height="auto",  # lo da la proporción de EDITOR_CSS
                 )
-                clear = gr.Button("Borrar zona", size="sm")
+                undo = gr.Button("Deshacer", size="sm")
         run = gr.Button("Analizar", variant="primary")
         table = gr.Dataframe(
             headers=HEADERS,
@@ -249,13 +269,19 @@ def build_demo() -> gr.Blocks:
         result = gr.Video(label="Video analizado", visible=False)
 
         demo.load(None, js=ZONE_RESET_JS)
-        video.upload(blank_zone, video, editor).then(None, js=ZONE_RESET_JS)
-        clear.click(blank_zone, video, editor).then(None, js=ZONE_RESET_JS)
+        upload.upload(use_video, upload, [video, editor, table, result]).then(
+            None, js=ZONE_RESET_JS
+        )
+        undo.click(None, js="() => window.editor?.undo()")
         # El avance se ve en el botón, que queda deshabilitado mientras analiza. Las barras de
         # progreso de Gradio iban una por resultado, y la de la tabla tapaba las filas nuevas.
-        run.click(lambda: gr.Button("Analizando…", interactive=False), None, run, queue=False).then(
-            on_analyze, [video, editor], [table, result, run], show_progress="hidden"
-        ).then(lambda: gr.Button("Analizar", interactive=True), None, run, queue=False)
+        analysis = run.click(
+            lambda: gr.Button("Analizando…", interactive=False), None, run, queue=False
+        ).then(on_analyze, [video, editor], [table, result, run], show_progress="hidden")
+        # .then debería correr también si on_analyze falla, pero en Gradio 6.30 no (probado): el
+        # botón quedaba trabado en "Analizando…". Por eso se restablece por éxito y por falla.
+        for after in (analysis.success, analysis.failure):
+            after(lambda: gr.Button("Analizar", interactive=True), None, run, queue=False)
     return demo
 
 

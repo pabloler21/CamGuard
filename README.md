@@ -17,17 +17,16 @@ Subís un video de una cámara, pintás el área restringida y la demo marca qui
 ## Cómo usarla
 
 1. Abrí **https://huggingface.co/spaces/Pabloler21/CamGuard**. Si dice que está durmiendo, esperá a que arranque (un par de minutos).
-2. Ya viene cargado un **video de ejemplo**. Si preferís uno propio, tocá la ✕ del video y subí el tuyo.
-3. Marcá en rojo la zona restringida sobre la imagen de la derecha: podés pintarla entera o solo dibujar su contorno (se rellena sola). Si te equivocás, tocá **Borrar zona** (o la flecha ↶ para deshacer el último trazo) y volvé a pintar.
+2. Ya viene cargado un **video de ejemplo**. Si preferís uno propio, tocá **Subir mi video**.
+3. Marcá en rojo la zona restringida sobre la imagen de la derecha: podés pintarla entera o solo dibujar su contorno (se rellena sola). Si te equivocás, tocá **Deshacer**.
 4. Tocá **Analizar**.
 
 Corre en una GPU gratuita compartida de Hugging Face (ZeroGPU), con una cuota diaria por persona: unos 2 minutos de GPU sin cuenta y 5 con una cuenta gratis de Hugging Face. Si se agota, esperá al día siguiente o iniciá sesión.
 
 ## Qué devuelve
 
-- El video anotado: la zona en rojo, las personas en verde y los intrusos en rojo, con un número de seguimiento.
-- Una tabla con cada entrada a la zona: ID, segundo de entrada, segundo de salida y duración.
-- Una captura del momento en que entró cada intruso.
+- Una tabla con cada entrada a la zona: ID, segundo de entrada, segundo de salida, duración y la foto del intruso al entrar. Las filas aparecen mientras se analiza.
+- Abajo, al terminar, el video anotado: la zona en rojo, las personas en verde y los intrusos en rojo, con un número de seguimiento.
 
 ## Privacidad
 
