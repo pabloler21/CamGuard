@@ -22,12 +22,12 @@ def video(tmp_path):
 
 def test_analyze_without_video_warns_and_skips_outputs():
     with pytest.warns(UserWarning, match="Primero subí un video"):
-        assert on_analyze(None, None) == (gr.skip(),) * 3
+        assert list(on_analyze(None, None)) == [(gr.skip(),) * 3]
 
 
 def test_analyze_without_zone_warns_and_skips_outputs(video):
     with pytest.warns(UserWarning, match="Pintá la zona"):
-        assert on_analyze(video, {"layers": []}) == (gr.skip(),) * 3
+        assert list(on_analyze(video, {"layers": []})) == [(gr.skip(),) * 3]
 
 
 def test_clear_zone_without_video_warns_and_skips_editor():

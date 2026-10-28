@@ -1,19 +1,21 @@
 """La página web (Gradio): subir un video, pintar la zona, analizar y ver el resultado.
 
 Es la única parte que conoce Gradio: traduce los ``ValueError`` del pipeline en avisos para
-el usuario y los resultados en tabla y galería.
+el usuario y los resultados en una tabla (con la foto de cada intruso) y el video anotado.
 """
 
+import base64
 import os
 import shutil
 
+import cv2
 import gradio as gr
 import numpy as np
 import spaces
 
 from camguard.config import FPS, MAX_SECONDS, MAX_UPLOAD, TEMP_DIR
 from camguard.detection import load_model
-from camguard.pipeline import analyze
+from camguard.pipeline import AnalysisResult, analyze
 from camguard.video import first_frame
 
 # Grosor del pincel, en píxeles del video (1920 de ancho en el ejemplo).
@@ -48,30 +50,21 @@ REFIT_EDITOR_JS = """() => {
 # corre entera y el trazo cae fuera de la imagen. Recortar lo que sobresale lo evita.
 EDITOR_CSS = ".pixi-target, .pixi-target-crop { overflow: hidden; }"
 
+# La página se explica sola: esto son conceptos, plegados para quien quiera saber más.
 # Hugging Face define SPACE_ID en todo Space; en la PC no existe.
-WHERE = (
-    "> 🔒 **El video se procesa en servidores de Hugging Face.** No subas grabaciones reales o "
-    "sensibles."
-    if os.getenv("SPACE_ID")
-    else "Todo corre en esta PC."
-)
-
-INSTRUCTIONS = f"""\
-# CamGuard — Intruso en zona
-1. Ya viene cargado un video de ejemplo. Si querés usar uno propio, tocá la ✕ del video y \
-subí el tuyo.
-2. Pintá encima de la imagen de la derecha el área restringida: el pincel ya está activo, \
-arrastrá directamente sobre la imagen. Si te equivocás, tocá **Borrar zona** y volvé a pintar.
-3. Tocá **Analizar**.
-
-Se analizan {FPS} cuadros por segundo y hasta {MAX_SECONDS} s de video.
-
-{WHERE}
-
-> ⚠️ **Es una demo.** Puede no detectar a algunas personas (lejanas, tapadas, agachadas o con \
-poca luz) y no reemplaza la vigilancia humana. Una entrada a los 0,2 s puede significar que la \
-persona ya estaba en la zona cuando empezó el video.
+ABOUT = f"""\
+- Es intruso quien tiene el centro del cuerpo sobre la zona.
+- Se analizan {FPS} cuadros por segundo y hasta {MAX_SECONDS} s de video.
+- Si alguien entró en el segundo 0, ya estaba en la zona cuando empezó el video.
+- Puede no detectar a personas lejanas, tapadas, agachadas o con poca luz: no reemplaza la \
+vigilancia humana.
+{"- El video se procesa en servidores de Hugging Face." if os.getenv("SPACE_ID") else ""}
 """
+
+HEADERS = ["ID", "Entró (s)", "Salió (s)", "Duración (s)", "Foto"]
+
+# Alto con que se ve la foto de cada intruso en la tabla.
+PHOTO_PX = 120
 
 
 def editor_value(background: np.ndarray, layers: list[np.ndarray] | None = None) -> dict:
@@ -124,69 +117,111 @@ def blank_zone(video_path: str | None):
         return gr.skip()
 
 
+def photo_html(image_rgb: np.ndarray) -> str:
+    """Convierte la foto de un intruso en un <img> embebido, para la columna "Foto"."""
+    _, jpg = cv2.imencode(".jpg", image_rgb[:, :, ::-1], [cv2.IMWRITE_JPEG_QUALITY, 85])
+    b64 = base64.b64encode(jpg).decode()
+    return f'<img src="data:image/jpeg;base64,{b64}" style="height:{PHOTO_PX}px;width:auto">'
+
+
+def table_rows(result: AnalysisResult) -> list[list]:
+    """Una fila por entrada a la zona. Salida y duración quedan vacías hasta terminar."""
+    photos = {s.track_id: photo_html(s.image) for s in result.snapshots}
+    done = result.video_path is not None
+    return [
+        [
+            e.track_id,
+            e.enter_s,
+            e.leave_s if done else "",
+            e.duration_s if done else "",
+            photos[e.track_id],
+        ]
+        for e in result.events
+    ]
+
+
 # En el Space de Hugging Face pide una GPU (ZeroGPU) mientras dura el análisis; en la PC no hace
 # nada. Va sobre on_analyze y no sobre analyze porque ZeroGPU lo corre en otro proceso y convierte
 # cualquier excepción que no sea gr.Error en un "ZeroGPU worker error": acá los ValueError ya
 # se volvieron avisos.
 @spaces.GPU
-def on_analyze(video_path: str | None, editor: dict | None, progress=gr.Progress()):  # noqa: B008
-    """Corre el análisis y lo convierte en lo que muestran los componentes de la página.
+def on_analyze(video_path: str | None, editor: dict | None):
+    """Corre el análisis y va mostrando sus resultados en la página.
 
-    Returns:
-        (video anotado, filas de la tabla de eventos, imágenes de la galería con su leyenda), o
-        ``gr.skip()`` en las tres (deja los resultados como estaban) si falta el video o la zona.
+    Yields:
+        (filas de la tabla, video anotado, texto del botón): al empezar (y se oculta el video
+        anterior), cada vez que entra alguien o avanza un 1%, y al final con el video. Si falta
+        el video o la zona, una sola vez ``gr.skip()`` en los tres: deja todo como estaba.
     """
     if not video_path:
         warn("Primero subí un video.")
-        return (gr.skip(),) * 3
+        yield (gr.skip(),) * 3
+        return
     layers = (editor or {}).get("layers") or []
+    results = analyze(video_path, layers, out_dir=TEMP_DIR / "resultados")
     try:
-        result = analyze(
-            video_path,
-            layers,
-            progress=lambda p: progress(p, desc="Analizando"),
-            out_dir=TEMP_DIR / "resultados",
-        )
+        result = next(results)  # el primer paso valida el video y la zona
     except ValueError as e:  # video ilegible o sin zona pintada
         warn(str(e))
-        return (gr.skip(),) * 3
+        yield (gr.skip(),) * 3
+        return
+
+    yield table_rows(result), gr.Video(value=None, visible=False), gr.skip()
+    shown, label = len(result.events), ""
+    for result in results:
+        if len(result.events) != shown:
+            shown = len(result.events)
+            yield table_rows(result), gr.skip(), gr.skip()
+        text = f"Analizando… {result.progress:.0%}"
+        if text != label:
+            label = text
+            yield gr.skip(), gr.skip(), label
 
     if not result.events:
         gr.Info("No hubo intrusiones en la zona.")
-    rows = [[e.track_id, e.enter_s, e.leave_s, e.duration_s] for e in result.events]
-    gallery = [(s.image, f"Intruso #{s.track_id} — {s.time_s:.1f} s") for s in result.snapshots]
-    return str(result.video_path), rows, gallery
+    yield table_rows(result), gr.Video(value=str(result.video_path), visible=True), gr.skip()
 
 
 def build_demo() -> gr.Blocks:
-    """Arma la página: video y editor lado a lado, el botón, y los tres resultados."""
+    """Arma la página: video y editor lado a lado, el botón, la tabla de intrusos y el video."""
     example_video, example_editor = load_example()
     # analytics_enabled=False: Gradio manda telemetría de uso por defecto (no los videos, pero
     # una app que maneja grabaciones de seguridad no debería hablar con nadie).
     with gr.Blocks(title="CamGuard", analytics_enabled=False, delete_cache=CACHE_CLEANUP) as demo:
-        gr.Markdown(INSTRUCTIONS)
+        gr.Markdown("# CamGuard — Intruso en zona")
+        with gr.Accordion("Sobre esta demo", open=False):
+            gr.Markdown(ABOUT)
         with gr.Row():
             video = gr.Video(value=example_video, label="Video", sources=["upload"])
             with gr.Column():
                 editor = gr.ImageEditor(
                     value=example_editor,
-                    label="Zona restringida (pintá encima)",
+                    label="Zona restringida",
                     type="numpy",
                     sources=[],  # la imagen siempre es el primer cuadro del video
                     brush=gr.Brush(default_size=BRUSH_SIZE, colors=["#ff0000"], color_mode="fixed"),
                 )
                 clear = gr.Button("Borrar zona", size="sm")
         run = gr.Button("Analizar", variant="primary")
-        result = gr.Video(label="Resultado")
         table = gr.Dataframe(
-            headers=["ID", "Entró (s)", "Salió (s)", "Duración (s)"], label="Eventos"
+            headers=HEADERS,
+            datatype=["number", "number", "number", "number", "html"],
+            label="Intrusos",
+            interactive=False,
+            wrap=True,
+            max_height="none",  # la página crece con la tabla, en vez de un scroll adentro
         )
-        gallery = gr.Gallery(label="Momento de entrada de cada intruso", columns=4)
+        # Oculto hasta que termina el análisis: vacío parecía roto.
+        result = gr.Video(label="Video analizado", visible=False)
 
         demo.load(None, js=REFIT_EDITOR_JS)
         video.upload(blank_zone, video, editor).then(None, js=REFIT_EDITOR_JS)
         clear.click(blank_zone, video, editor).then(None, js=REFIT_EDITOR_JS)
-        run.click(on_analyze, [video, editor], [result, table, gallery])
+        # El avance se ve en el botón, que queda deshabilitado mientras analiza. Las barras de
+        # progreso de Gradio iban una por resultado, y la de la tabla tapaba las filas nuevas.
+        run.click(lambda: gr.Button("Analizando…", interactive=False), None, run, queue=False).then(
+            on_analyze, [video, editor], [table, result, run], show_progress="hidden"
+        ).then(lambda: gr.Button("Analizar", interactive=True), None, run, queue=False)
     return demo
 
 

@@ -1,12 +1,13 @@
 """El análisis completo de un video: lee, detecta, decide quién es intruso, dibuja y resume.
 
-No depende de la interfaz: informa errores con ``ValueError`` y el progreso con un callback,
-así se puede usar desde Gradio, desde un script o desde los tests (con un tracker falso).
+No depende de la interfaz: informa errores con ``ValueError`` y va devolviendo resultados
+parciales a medida que avanza, así se puede usar desde Gradio, desde un script o desde los tests
+(con un tracker falso).
 """
 
 import math
 import tempfile
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
@@ -30,12 +31,16 @@ class Tracker(Protocol):
         ...
 
 
+# Aire que se deja alrededor de una persona al recortarla, como fracción de su alto y ancho.
+CROP_MARGIN = 0.1
+
+
 @dataclass(frozen=True)
 class Snapshot:
-    """Captura del momento en que una persona aparece por primera vez dentro de la zona.
+    """Foto de una persona en el momento en que aparece por primera vez dentro de la zona.
 
     Attributes:
-        image: Cuadro anotado, en RGB (listo para mostrar).
+        image: La persona recortada del cuadro original (sin dibujos encima), en RGB.
         track_id: Número de seguimiento de la persona.
         time_s: Segundo del video.
     """
@@ -47,41 +52,54 @@ class Snapshot:
 
 @dataclass(frozen=True)
 class AnalysisResult:
-    """Resultado de analizar un video.
+    """Resultado de analizar un video, parcial mientras el análisis avanza.
 
     Attributes:
-        video_path: mp4 anotado (H.264), en una carpeta temporal.
-        events: Cada estadía de una persona en la zona, ordenadas por entrada.
-        snapshots: Una captura por persona: la de su primera entrada.
+        progress: Avance, entre 0 y 1.
+        events: Cada estadía de una persona en la zona, ordenadas por entrada. Mientras se
+            analiza, la salida de quien sigue adentro todavía no es la definitiva.
+        snapshots: Una foto por persona: la de su primera entrada.
+        video_path: mp4 anotado (H.264), en una carpeta temporal. ``None`` hasta terminar.
     """
 
-    video_path: Path
+    progress: float
     events: list[Event]
     snapshots: list[Snapshot]
+    video_path: Path | None = None
+
+
+def crop_person(frame: np.ndarray, box: np.ndarray) -> np.ndarray:
+    """Recorta a una persona del cuadro, con algo de aire alrededor."""
+    x1, y1, x2, y2 = box
+    mx, my = (x2 - x1) * CROP_MARGIN, (y2 - y1) * CROP_MARGIN
+    h, w = frame.shape[:2]
+    top, bottom = max(0, int(y1 - my)), min(h, int(y2 + my))
+    left, right = max(0, int(x1 - mx)), min(w, int(x2 + mx))
+    return frame[top:bottom, left:right]
 
 
 def analyze(
     video_path: str | Path,
     zone_layers: list[np.ndarray],
     make_tracker: Callable[[float], Tracker] = PersonTracker,
-    progress: Callable[[float], None] | None = None,
     out_dir: Path | None = None,
-) -> AnalysisResult:
+) -> Iterator[AnalysisResult]:
     """Analiza un video y detecta quién entra a la zona restringida.
 
     Se analizan ``FPS`` cuadros por segundo y hasta ``MAX_SECONDS`` segundos (ver ``config``).
+    Es un generador: devuelve el resultado parcial después de cada cuadro, para mostrar a los
+    intrusos a medida que aparecen, y al final el completo, con el video.
 
     Args:
         video_path: Video a analizar.
         zone_layers: Capas RGBA pintadas por el usuario (ver :func:`zone_from_layers`).
         make_tracker: Crea el tracker a partir de los fps analizados. Por defecto el real
             (RF-DETR + ByteTrack); los tests pasan uno falso.
-        progress: Se llama después de cada cuadro con el avance, entre 0 y 1.
         out_dir: Dónde guardar el video anotado (en una subcarpeta propia). Por defecto, la
             carpeta temporal del sistema. La app pasa una que vacía al arrancar.
 
-    Returns:
-        El video anotado, los eventos y las capturas.
+    Yields:
+        Los resultados parciales y, último, el completo (con ``video_path``).
 
     Raises:
         ValueError: Si el video no se puede leer o no hay zona pintada.
@@ -109,12 +127,15 @@ def analyze(
             centers = detections.get_anchors_coordinates(sv.Position.CENTER)
             inside = points_in_zone(centers, zone)
             annotated = annotate(frame, detections, inside, zone)
-            for track_id in detections.tracker_id[inside].tolist():
+            for box, track_id in zip(
+                detections.xyxy[inside], detections.tracker_id[inside], strict=True
+            ):
                 if track_id not in frames_in_zone:
-                    snapshots.append(Snapshot(annotated[:, :, ::-1], track_id, i / fps))
-                frames_in_zone.setdefault(track_id, []).append(i)
+                    photo = crop_person(frame, box)[:, :, ::-1]
+                    snapshots.append(Snapshot(photo, int(track_id), i / fps))
+                frames_in_zone.setdefault(int(track_id), []).append(i)
             writer.write(annotated)
-            if progress:
-                progress(min(1.0, (i + 1) / expected))
+            progress = min(1.0, (i + 1) / expected)
+            yield AnalysisResult(progress, build_events(frames_in_zone, fps), list(snapshots))
 
-    return AnalysisResult(out_path, build_events(frames_in_zone, fps), snapshots)
+    yield AnalysisResult(1.0, build_events(frames_in_zone, fps), snapshots, out_path)

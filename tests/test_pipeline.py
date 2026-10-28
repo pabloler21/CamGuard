@@ -10,6 +10,12 @@ from camguard.video import H264Writer, probe
 SIZE = 100  # video de 100x100; la zona es el cuarto inferior derecho
 
 
+def last(results):
+    """El resultado final de analyze, que va devolviendo parciales."""
+    *_, result = results
+    return result
+
+
 class FakeTracker:
     """Reemplaza al modelo: una persona (#1) camina afuera, entra en los cuadros 2 a 5 y sale."""
 
@@ -45,15 +51,21 @@ def zone_layers():
 
 
 def test_analyze_detects_the_intrusion(video, zone_layers):
-    progress = []
-    result = analyze(video, zone_layers, make_tracker=FakeTracker, progress=progress.append)
+    *partials, result = analyze(video, zone_layers, make_tracker=FakeTracker)
 
     assert result.events == [Event(track_id=1, enter_s=0.4, leave_s=1.2)]
     assert [(s.track_id, s.time_s) for s in result.snapshots] == [(1, 0.4)]
-    assert result.snapshots[0].image.shape == (SIZE, SIZE, 3)
     assert probe(result.video_path).frame_count == 10
-    assert len(progress) == 10
-    assert progress[-1] == 1.0
+    # Un parcial por cuadro, sin video; el intruso aparece desde el cuadro en que entra.
+    assert [p.progress for p in partials] == [(i + 1) / 10 for i in range(10)]
+    assert all(p.video_path is None for p in partials)
+    assert [len(p.events) for p in partials] == [0, 0] + [1] * 8
+
+
+def test_snapshot_is_the_person_cropped(video, zone_layers):
+    photo = last(analyze(video, zone_layers, make_tracker=FakeTracker)).snapshots[0].image
+    # Recuadro de 10x20 en (70, 55), con 10% de aire: 1 px a los costados, 2 arriba y abajo.
+    assert photo.shape == (24, 12, 3)
 
 
 class StraddlingTracker:
@@ -72,23 +84,23 @@ class StraddlingTracker:
 
 def test_person_counts_by_body_center_not_feet(video, zone_layers):
     # En la imagen se la ve afuera de la zona, que es lo que importa a quien mira el video.
-    result = analyze(video, zone_layers, make_tracker=StraddlingTracker)
+    result = last(analyze(video, zone_layers, make_tracker=StraddlingTracker))
     assert result.events == []
 
 
 def test_analyze_writes_the_result_inside_out_dir(video, zone_layers, tmp_path):
     # Así la app puede borrar todos los videos generados (son grabaciones reales).
     out_dir = tmp_path / "resultados"
-    result = analyze(video, zone_layers, make_tracker=FakeTracker, out_dir=out_dir)
+    result = last(analyze(video, zone_layers, make_tracker=FakeTracker, out_dir=out_dir))
     assert out_dir in result.video_path.parents
 
 
 def test_analyze_respects_max_seconds(video, zone_layers, monkeypatch):
     monkeypatch.setattr("camguard.pipeline.MAX_SECONDS", 1)
-    result = analyze(video, zone_layers, make_tracker=FakeTracker)
+    result = last(analyze(video, zone_layers, make_tracker=FakeTracker))
     assert probe(result.video_path).frame_count == 5
 
 
 def test_analyze_without_zone_raises(video):
     with pytest.raises(ValueError, match="Pintá la zona"):
-        analyze(video, [], make_tracker=FakeTracker)
+        next(analyze(video, [], make_tracker=FakeTracker))
