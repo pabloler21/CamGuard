@@ -237,7 +237,7 @@ def build_demo() -> gr.Blocks:
     # una app que maneja grabaciones de seguridad no debería hablar con nadie).
     with gr.Blocks(title="CamGuard", analytics_enabled=False, delete_cache=CACHE_CLEANUP) as demo:
         gr.Markdown(
-            "# CamGuard\nPablo Lerner\n\n"
+            "# CamGuard - Pablo Lerner\n"
             "Detecta quién entra a una zona restringida de tus cámaras, cuándo y por cuánto tiempo."
         )
         with gr.Row():
