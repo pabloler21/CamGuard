@@ -2,7 +2,7 @@ import gradio as gr
 import numpy as np
 import pytest
 
-from camguard.ui import on_analyze, use_video
+from camguard.ui import EDITOR_WIDTH, editor_value, on_analyze, use_video
 from camguard.video import H264Writer
 
 # Que falte un paso (sin video, sin zona) no es un error de la app: tiene que mostrarse como
@@ -35,3 +35,12 @@ def test_unreadable_upload_warns_and_keeps_everything(tmp_path):
     path.write_bytes(b"no es un video")
     with pytest.warns(UserWarning):
         assert use_video(str(path)) == (gr.skip(),) * 4
+
+
+def test_editor_image_is_shrunk_keeping_proportions():
+    # Un cuadro grande en el editor cerraba la pestaña en iPhone; la zona se vuelve a agrandar
+    # al tamaño del video en zone_from_layers.
+    big = np.zeros((1080, 1920, 3), np.uint8)
+    assert editor_value(big)["background"].shape == (540, EDITOR_WIDTH, 3)
+    small = np.zeros((48, 64, 3), np.uint8)
+    assert editor_value(small)["background"] is small

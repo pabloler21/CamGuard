@@ -17,8 +17,14 @@ from camguard.detection import load_model
 from camguard.pipeline import AnalysisResult, analyze
 from camguard.video import first_frame
 
-# Grosor del pincel, en píxeles del video (1920 de ancho en el ejemplo).
-BRUSH_SIZE = 60
+# Ancho máximo de la imagen del editor. El editor (Gradio 6.30) crea cada capa del tamaño de la
+# imagen por la densidad de la pantalla al cuadrado: en un iPhone 15 Pro Max (densidad 3) un
+# cuadro de 1920 px daba ~75 MB por capa y Safari cerraba la pestaña ("A problem repeatedly
+# occurred"). Achicada, la zona pintada se agranda al tamaño del video en zone_from_layers.
+EDITOR_WIDTH = 960
+
+# Grosor del pincel, en píxeles de la imagen del editor (EDITOR_WIDTH de ancho).
+BRUSH_SIZE = 30
 
 # Gradio borra sus copias de videos subidos y resultados: cada media hora, las de más de 1 hora.
 CACHE_CLEANUP = (1800, 3600)
@@ -115,7 +121,11 @@ PHOTO_PX = 120
 
 
 def editor_value(background: np.ndarray, layers: list[np.ndarray] | None = None) -> dict:
-    """Arma el valor del editor de Gradio: imagen de fondo y capas pintadas."""
+    """Arma el valor del editor de Gradio: imagen de fondo (achicada a ``EDITOR_WIDTH``) y capas."""
+    height, width = background.shape[:2]
+    if width > EDITOR_WIDTH:
+        size = (EDITOR_WIDTH, round(height * EDITOR_WIDTH / width))
+        background = cv2.resize(background, size, interpolation=cv2.INTER_AREA)
     return {"background": background, "layers": layers or [], "composite": None}
 
 
